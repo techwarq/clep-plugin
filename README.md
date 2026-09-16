@@ -20,7 +20,13 @@ export CLEP_API_KEY=clep_live_...                     # dashboard → API Keys
 
 ## Use
 
-- `/clep:clep-instrument` — Claude adds `data-clep` + actions + states.
-- `/clep:clep-clip` — scan features, render the MP4, poll, download.
+One command:
+
+```
+/clep:clep make a clip of the signup flow at http://localhost:3000, cinematic style
+```
+
+Claude checks if the feature is already marked up, instruments it (`data-clep`
+attributes) if not, then renders and reports back where the MP4 landed.
 
 See [`plugins/clep/README.md`](plugins/clep/README.md) for the full CLI + backend docs.

@@ -28,9 +28,16 @@ export CLEP_API_KEY=clep_live_...                     # dashboard → API Keys
 
 ## Use (in Claude Code)
 
-- `/clep:instrument <flow>` — Claude adds `data-clep` + actions + states.
-- "scan my app at https://…/dashboard" — `clep scan <url>` lists features.
-- `/clep:clip ai-research --style cinematic` — renders the MP4, polls, downloads.
+One command. Say what you want:
+
+```
+/clep:clep make a clip of the signup flow at http://localhost:3000, cinematic style
+```
+
+Claude checks if the feature is already marked up (`data-clep` attributes),
+instruments it if not, renders the MP4, and reports back where it landed —
+it's always in the platform dashboard, plus a local file if you ask for one.
+No separate "instrument first" step.
 
 Direct CLI equivalents (`${CLAUDE_PLUGIN_ROOT}/bin/clep`, stdlib only):
 
