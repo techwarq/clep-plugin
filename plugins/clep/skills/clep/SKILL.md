@@ -1,7 +1,7 @@
 ---
 name: clep
 description: Turn a plain-English request ("make a clip of the signup flow", "record the AI research demo") into a rendered product video. Instruments data-clep attributes if the feature isn't marked up yet, then scans and renders via the hosted Clep backend. Use whenever the user asks for a demo clip, product video, or to record/clip/capture a feature — this is the only Clep command needed, don't ask the user to run a separate instrument step first.
-version: 0.2.1
+version: 0.2.2
 ---
 
 # Clep — one command, feature request to MP4
@@ -36,16 +36,30 @@ see one of:
   configured yet` (never reached a backend at all — nothing's set, so it
   fell through to the localhost dev default)
 
-Either one means the same thing: stop, ask the user for their Clep API key
-(point them at the dashboard → API Keys — don't invent one) and their
-backend's URL if it's not the local default, then run:
+Either one means the same thing — you need real credentials, full stop.
+**Do not** offer to start a local backend, run `platform/server.py`, or
+present alternatives — Clep is a hosted product; nobody using this plugin is
+expected to run their own backend.
 
-```bash
-${CLAUDE_PLUGIN_ROOT}/bin/clep configure --url <CLEP_API_URL> --key <the key they gave you>
-```
+**Never ask for the key in chat, and never run `clep configure` yourself
+with a key typed into a tool call** — either way the secret ends up sitting
+in the conversation transcript. `clep configure` run with no flags is an
+interactive prompt (a bordered box, paste-and-enter) built for exactly this,
+but it only works as a live terminal prompt when a human is typing into it
+directly — not when you invoke it as a tool call. So stop and tell the user,
+in one short message:
 
-That persists it for every future session, so this only happens once per
-machine. Retry the failing call after configuring.
+> I need a Clep API key before I can render anything. Run this in your
+> terminal (not here in chat):
+>
+> `${CLAUDE_PLUGIN_ROOT}/bin/clep configure`
+>
+> It'll prompt you for the key — grab one from your dashboard's API Keys
+> page. Let me know once it's done and I'll pick up where I left off.
+
+Then stop and wait — don't retry until they confirm. When they do, re-run
+the call that originally failed; `clep configure` already persisted the
+config to `~/.clep/config.json`, so nothing else needs redoing.
 
 ## 1. Check instrumentation — scan first, always
 
