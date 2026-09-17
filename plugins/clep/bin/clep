@@ -95,6 +95,13 @@ def _req(method: str, path: str, body: dict | None = None) -> tuple[int, dict | 
 
 def _box(title: str, lines: list[str], footer: str, inner: int = 60, max_inner: int = 96) -> None:
     import textwrap
+    # NO_COLOR (https://no-color.org) and dumb terminals opt out of ANSI —
+    # plain ASCII box still renders fine either way, just unstyled.
+    color = not os.environ.get("NO_COLOR") and os.environ.get("TERM", "") != "dumb"
+    bold = "\033[1m" if color else ""
+    dim = "\033[2m" if color else ""
+    reset = "\033[0m" if color else ""
+
     # URLs stay intact (breaking one mid-string makes it unusable) — everything
     # else wraps to `inner` so prose doesn't stretch the box.
     wrapped = [
@@ -103,18 +110,19 @@ def _box(title: str, lines: list[str], footer: str, inner: int = 60, max_inner: 
     ]
     content_width = max(len(title), len(footer), *(len(l) for l in wrapped))
     width = min(max(content_width, inner), max_inner) + 2
-    print("┌" + "─" * width + "┐")
-    print(f"│  {title.ljust(width - 2)}│")
-    print("│" + " " * width + "│")
+
+    border = lambda s: f"{dim}{s}{reset}"
+    print(border("┌" + "─" * width + "┐"))
+    print(f"{border('│')}  {bold}{title.ljust(width - 2)}{reset}{border('│')}")
+    print(border("│" + " " * width + "│"))
     for l in wrapped:
-        print(f"│  {l.ljust(width - 2)}│")
-    print("│" + " " * width + "│")
-    print(f"│  {footer.ljust(width - 2)}│")
-    print("└" + "─" * width + "┘")
+        print(f"{border('│')}  {l.ljust(width - 2)}{border('│')}")
+    print(border("│" + " " * width + "│"))
+    print(f"{border('│')}  {dim}{footer.ljust(width - 2)}{reset}{border('│')}")
+    print(border("└" + "─" * width + "┘"))
 
 
 def cmd_configure(a) -> None:
-    cfg = _load_config()
     url = a.url
     key = a.key
     interactive = sys.stdin.isatty() and not key
@@ -134,11 +142,13 @@ def cmd_configure(a) -> None:
     if not key:
         print("[clep] error: no API key given (pass --key or run without flags to be prompted)", file=sys.stderr)
         sys.exit(1)
-    # --url is only for self-hosters — nearly everyone wants the hosted
-    # default, so it's never asked for interactively, only accepted via flag.
-    url = (url or cfg.get("api_url") or _HOSTED_URL).rstrip("/")
+    # --url is only for self-hosters, and only applies for *this* run — never
+    # falls back to whatever was in the config file before, or a stale/wrong
+    # URL saved once would keep re-saving itself forever. Always the hosted
+    # default unless --url is explicitly given right now.
+    url = (url or _HOSTED_URL).rstrip("/")
     _save_config({"api_url": url, "api_key": key})
-    print(f"[clep] saved {_CONFIG_PATH} (api_url={url})")
+    print(f"[clep] saved {_CONFIG_PATH}" + (f" (api_url={url})" if a.url else ""))
 
 
 def cmd_health(_a) -> None:

@@ -1,7 +1,7 @@
 ---
 name: clep
 description: Turn a plain-English request ("make a clip of the signup flow", "record the AI research demo") into a rendered product video. Instruments data-clep attributes if the feature isn't marked up yet, then scans and renders via the hosted Clep backend. Use whenever the user asks for a demo clip, product video, or to record/clip/capture a feature — this is the only Clep command needed, don't ask the user to run a separate instrument step first.
-version: 0.2.3
+version: 0.2.4
 ---
 
 # Clep — one command, feature request to MP4
