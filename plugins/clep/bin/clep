@@ -33,6 +33,12 @@ from pathlib import Path
 
 _CONFIG_PATH = Path.home() / ".clep" / "config.json"
 _HOSTED_URL = "https://clep-platform-919279481036.us-central1.run.app"
+_VERSION = "0.2.6"
+_VERSION_CHECK_URL = (
+    "https://raw.githubusercontent.com/techwarq/clep-plugin/main/"
+    "plugins/clep/.claude-plugin/plugin.json"
+)
+_VERSION_CHECK_TTL = 24 * 3600
 
 
 def _load_config() -> dict:
@@ -46,6 +52,44 @@ def _save_config(cfg: dict) -> None:
     _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     _CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
     _CONFIG_PATH.chmod(0o600)
+
+
+def _version_tuple(v: str) -> tuple[int, ...]:
+    parts = []
+    for p in v.strip().split("."):
+        try:
+            parts.append(int(p))
+        except ValueError:
+            break
+    return tuple(parts)
+
+
+def _check_update() -> None:
+    """Best-effort, cached, never fatal: prints one line if a newer plugin
+    version is published. Silent on any failure (offline, GitHub down,
+    rate-limited) — this must never block or break a real command."""
+    cfg = _load_config()
+    cached = cfg.get("_update_check") or {}
+    now = time.time()
+    latest = cached.get("latest")
+    if not isinstance(cached.get("checked_at"), (int, float)) or now - cached["checked_at"] > _VERSION_CHECK_TTL:
+        try:
+            req = urllib.request.Request(_VERSION_CHECK_URL)
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                latest = json.loads(resp.read()).get("version")
+        except Exception:
+            latest = cached.get("latest")
+        cfg["_update_check"] = {"checked_at": now, "latest": latest}
+        try:
+            _save_config(cfg)
+        except Exception:
+            pass
+    if latest and _version_tuple(latest) > _version_tuple(_VERSION):
+        print(
+            f"[clep] update available: {_VERSION} -> {latest} — in Claude Code, run "
+            f"`/plugin marketplace update clep-marketplace` then `/reload-plugins`.",
+            file=sys.stderr,
+        )
 
 
 def _base() -> str:
@@ -296,6 +340,10 @@ def build() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    try:
+        _check_update()
+    except Exception:
+        pass
     a = build().parse_args()
     a.fn(a)
 
