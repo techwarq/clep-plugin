@@ -25,11 +25,20 @@ Backend reachability: `http://localhost`/`127.0.0.1` in the URL means the
 run on the same machine (local dev), otherwise needs a public URL. If
 `CLEP_API_URL` isn't set, assume the default `http://127.0.0.1:8787`.
 
-**First run / 401s**: `${CLAUDE_PLUGIN_ROOT}/bin/clep` also reads
+**First run**: `${CLAUDE_PLUGIN_ROOT}/bin/clep` also reads
 `~/.clep/config.json` (falls back to it when `CLEP_API_URL`/`CLEP_API_KEY`
-aren't set). If any call 401s and that file doesn't exist yet, ask the user
-for their Clep API key (point them at the dashboard → API Keys — don't invent
-one), then run:
+aren't set). On a fresh install nothing is configured yet, so the *first*
+call (usually `scan`) fails before it even reaches a real backend — you'll
+see one of:
+- `error: unauthorized: no valid API key...` (a real 401 — reached the
+  backend, key's missing/wrong)
+- `error: can't reach http://127.0.0.1:8787 — no CLEP_API_URL/CLEP_API_KEY
+  configured yet` (never reached a backend at all — nothing's set, so it
+  fell through to the localhost dev default)
+
+Either one means the same thing: stop, ask the user for their Clep API key
+(point them at the dashboard → API Keys — don't invent one) and their
+backend's URL if it's not the local default, then run:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/bin/clep configure --url <CLEP_API_URL> --key <the key they gave you>
