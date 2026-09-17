@@ -9,7 +9,7 @@ No npm SDK to install. No local pipeline. Just the plugin + an API key.
 ## Install
 
 ```
-/plugin marketplace add <you>/allore-pipelines
+/plugin marketplace add techwarq/clep-plugin
 /plugin install clep@clep-marketplace
 ```
 
@@ -24,14 +24,15 @@ claude --plugin-dir ./plugins/clep
 Either run once (saves to `~/.clep/config.json`, picked up automatically after):
 
 ```bash
-bin/clep configure   # prompts for CLEP_API_URL and CLEP_API_KEY (dashboard → API Keys)
+bin/clep configure   # prompts for your API key (dashboard → API Keys)
 ```
 
-...or set env vars each session (these win over the config file):
+Defaults to the hosted Clep backend — only pass `--url` if you're
+self-hosting. Or set env vars each session (these win over the config file):
 
 ```bash
-export CLEP_API_URL=https://your-backend.example.com  # default http://127.0.0.1:8787
 export CLEP_API_KEY=clep_live_...                     # dashboard → API Keys
+export CLEP_API_URL=https://your-backend.example.com  # only if self-hosting
 ```
 
 ## Use (in Claude Code)

@@ -6,7 +6,7 @@ render clips without any local pipeline install.
 
 Env (checked first; falls back to ~/.clep/config.json, written by `clep
 configure`):
-  CLEP_API_URL  base URL, default http://127.0.0.1:8787
+  CLEP_API_URL  base URL, default the hosted Clep backend (override for self-hosting)
   CLEP_API_KEY  platform API key (dashboard -> API Keys). Required when the
                 backend sets CLEP_API_KEYS; sent as X-API-Key.
 
@@ -32,6 +32,7 @@ import urllib.request
 from pathlib import Path
 
 _CONFIG_PATH = Path.home() / ".clep" / "config.json"
+_HOSTED_URL = "https://clep-platform-919279481036.us-central1.run.app"
 
 
 def _load_config() -> dict:
@@ -48,7 +49,7 @@ def _save_config(cfg: dict) -> None:
 
 
 def _base() -> str:
-    url = os.environ.get("CLEP_API_URL") or _load_config().get("api_url") or "http://127.0.0.1:8787"
+    url = os.environ.get("CLEP_API_URL") or _load_config().get("api_url") or _HOSTED_URL
     return url.rstrip("/")
 
 
@@ -82,16 +83,13 @@ def _req(method: str, path: str, body: dict | None = None) -> tuple[int, dict | 
         print(f"[clep] error: {payload.get('error', payload)}", file=sys.stderr)
         sys.exit(1)
     except urllib.error.URLError as e:
-        # Connection-level failure (refused/DNS/timeout) — never reached the
-        # backend, so there was no HTTP response to read a 401 off of. Most
-        # common cause: nothing configured yet, so _base() fell through to
-        # the localhost dev default and nothing's listening there.
-        if not (os.environ.get("CLEP_API_URL") or _load_config().get("api_url")):
-            print(f"[clep] error: can't reach {url} — no CLEP_API_URL/CLEP_API_KEY configured yet. "
-                  f"Run `clep configure` (dashboard -> API Keys for the key).", file=sys.stderr)
-        else:
-            print(f"[clep] error: can't reach {url} ({e.reason}). Check the URL — "
-                  f"`clep configure` to fix it.", file=sys.stderr)
+        # Connection-level failure (refused/DNS/timeout/no network) — never
+        # reached a backend at all, so there was no HTTP response to read a
+        # 401 off of. _base() defaults to the real hosted URL now, so this
+        # is a genuine reachability problem (network down, or --url points
+        # somewhere broken), not "forgot to configure."
+        print(f"[clep] error: can't reach {url} ({e.reason}). Check your network, or "
+              f"`clep configure --url` if you meant to point elsewhere.", file=sys.stderr)
         sys.exit(1)
 
 
@@ -119,9 +117,8 @@ def cmd_configure(a) -> None:
     cfg = _load_config()
     url = a.url
     key = a.key
-    interactive = sys.stdin.isatty() and not (url and key)
+    interactive = sys.stdin.isatty() and not key
     if interactive:
-        default_url = url or cfg.get("api_url") or "http://127.0.0.1:8787"
         _box(
             "API key",
             [
@@ -132,16 +129,15 @@ def cmd_configure(a) -> None:
             ],
             "enter submit · esc to cancel (Ctrl+C)",
         )
-        typed_url = input(f"\nCLEP_API_URL [{default_url}]: ").strip()
-        url = typed_url or default_url
         while not key:
-            key = input("API key: ").strip()
-    if not url:
-        url = cfg.get("api_url") or "http://127.0.0.1:8787"
+            key = input("\nAPI key: ").strip()
     if not key:
         print("[clep] error: no API key given (pass --key or run without flags to be prompted)", file=sys.stderr)
         sys.exit(1)
-    _save_config({"api_url": url.rstrip("/"), "api_key": key})
+    # --url is only for self-hosters — nearly everyone wants the hosted
+    # default, so it's never asked for interactively, only accepted via flag.
+    url = (url or cfg.get("api_url") or _HOSTED_URL).rstrip("/")
+    _save_config({"api_url": url, "api_key": key})
     print(f"[clep] saved {_CONFIG_PATH} (api_url={url})")
 
 

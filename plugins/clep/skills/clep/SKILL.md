@@ -1,7 +1,7 @@
 ---
 name: clep
 description: Turn a plain-English request ("make a clip of the signup flow", "record the AI research demo") into a rendered product video. Instruments data-clep attributes if the feature isn't marked up yet, then scans and renders via the hosted Clep backend. Use whenever the user asks for a demo clip, product video, or to record/clip/capture a feature — this is the only Clep command needed, don't ask the user to run a separate instrument step first.
-version: 0.2.2
+version: 0.2.3
 ---
 
 # Clep — one command, feature request to MP4
@@ -20,23 +20,18 @@ Extract from the user's request:
 - **What to type/click** (optional) — becomes `--query` or a steps plan.
 - **Look** (optional) — style/fps/quality; default `saas` / 60fps / 1080p.
 
-Backend reachability: `http://localhost`/`127.0.0.1` in the URL means the
-*backend's* localhost, not necessarily the user's terminal — fine when both
-run on the same machine (local dev), otherwise needs a public URL. If
-`CLEP_API_URL` isn't set, assume the default `http://127.0.0.1:8787`.
+Backend: `${CLAUDE_PLUGIN_ROOT}/bin/clep` talks to the hosted Clep backend by
+default — no URL to configure, ever, unless the user is self-hosting (then
+`CLEP_API_URL`/`clep configure --url` overrides it). The **App URL** you're
+extracting in this step is a different thing entirely: it's the app *being
+clipped* (e.g. their `localhost:3000` dev server), not the Clep backend.
 
 **First run**: `${CLAUDE_PLUGIN_ROOT}/bin/clep` also reads
-`~/.clep/config.json` (falls back to it when `CLEP_API_URL`/`CLEP_API_KEY`
-aren't set). On a fresh install nothing is configured yet, so the *first*
-call (usually `scan`) fails before it even reaches a real backend — you'll
-see one of:
-- `error: unauthorized: no valid API key...` (a real 401 — reached the
-  backend, key's missing/wrong)
-- `error: can't reach http://127.0.0.1:8787 — no CLEP_API_URL/CLEP_API_KEY
-  configured yet` (never reached a backend at all — nothing's set, so it
-  fell through to the localhost dev default)
+`~/.clep/config.json` (falls back to it when `CLEP_API_KEY` isn't set). On a
+fresh install there's no key yet, so the *first* call (usually `scan`) 401s:
+`error: unauthorized: no valid API key...`. You need real credentials, full
+stop.
 
-Either one means the same thing — you need real credentials, full stop.
 **Do not** offer to start a local backend, run `platform/server.py`, or
 present alternatives — Clep is a hosted product; nobody using this plugin is
 expected to run their own backend.
@@ -144,9 +139,7 @@ timed out, or the URL is unreachable from the backend) and suggest the fix.
 ## 4. Report back
 
 Tell the user, in one short message:
-- The video is live in the dashboard (`<CLEP_API_URL>/`, e.g.
-  `http://127.0.0.1:8787/`) — it shows up under "Clip jobs" with an inline
-  player and a Download MP4 link, no action needed.
+- The video is live in their Clep dashboard's Usage page — no action needed.
 - If `--out` was used, the local file path too.
 - Style/fps/quality used, so they know what to ask for differently next time.
 
