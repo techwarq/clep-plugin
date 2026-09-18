@@ -1,7 +1,7 @@
 ---
 name: clep
-description: Turn a plain-English request ("make a clip of the signup flow", "record the AI research demo") into a rendered product video. Instruments data-clep attributes if the feature isn't marked up yet, then scans and renders via the hosted Clep backend. Use whenever the user asks for a demo clip, product video, or to record/clip/capture a feature — this is the only Clep command needed, don't ask the user to run a separate instrument step first.
-version: 0.2.6
+description: Turn a plain-English request into a rendered product video — a single-feature demo clip ("make a clip of the signup flow"), a full-page scroll tour ("full walkthrough of the homepage showing everything, 25s"), or an end-to-end launch video ("product launch video for https://acme.ai"). Instruments data-clep attributes for feature clips if missing, then scans and renders via the hosted Clep backend. Use whenever the user asks for a demo clip, product video, scroll tour, walkthrough, or to record/clip/capture a feature — this is the only Clep command needed, don't ask the user to run a separate instrument step first.
+version: 0.2.8
 ---
 
 # Clep — one command, feature request to MP4
@@ -38,10 +38,31 @@ This applies throughout every step below.
 Extract from the user's request:
 - **App URL** — if not given, ask, or infer from a dev server already running
   in this repo (e.g. `localhost:3000`).
-- **Feature** — what flow/element (kebab-case a short name, e.g. "signup
-  flow" → `signup`).
-- **What to type/click** (optional) — becomes `--query` or a steps plan.
-- **Look** (optional) — style/fps/quality; default `saas` / 60fps / 1080p.
+- **Kind** — which of the four the request actually is:
+  - **feature** — one instrumented interaction ("clip of the signup flow",
+    "demo the AI research feature"). Needs `data-clep` on the page (step 2).
+    Default when the request names a specific feature/flow.
+  - **tour** — a scroll walkthrough of the page, no instrumentation needed
+    ("full tour of the homepage", "walkthrough showing everything", "show
+    off the whole page"). Use `--kind tour`, skip step 2 entirely.
+  - **launch** — like tour, but maps the *whole* page end-to-end first
+    (hero → every section → CTA) before shooting ("product launch video",
+    "end-to-end demo of the site"). Use `--kind launch`, skip step 2.
+  - **mockup** — synthetic UI render, no live URL/browser at all (rare —
+    only when the user explicitly has no live app to point at).
+  If ambiguous, `--prompt "<their exact words>"` lets the backend's own
+  parser (director.py) work it out — see step 3.
+- **Sections** (tour/launch only) — named stops if they gave any ("showing
+  hero, pricing, contact"); omit for tour to sweep the whole page evenly, or
+  for launch to map every section automatically.
+- **Duration** (tour/launch) — seconds, 2–60. A tour/launch with no duration
+  given still renders, but pick a sane one (~15–25s for "everything") rather
+  than leaving it to the default per-section pacing when the user named a
+  number ("25 seconds", "half a minute").
+- **What to type/click** (feature only, optional) — becomes `--query` or a
+  steps plan.
+- **Look** (optional) — style/fps/quality/movement; default `saas` / 60fps /
+  1080p / calm (tour, launch) or standard (feature).
 
 Backend: `${CLAUDE_PLUGIN_ROOT}/bin/clep` talks to the hosted Clep backend by
 default — no URL to configure, ever, unless the user is self-hosting (then
@@ -79,7 +100,11 @@ Then stop and wait — don't retry until they confirm. When they do, re-run
 the call that originally failed; `clep configure` already persisted the
 config to `~/.clep/config.json`, so nothing else needs redoing.
 
-## 1. Check instrumentation — scan first, always
+## 1. Check instrumentation — scan first, always (feature kind only)
+
+**Tour and launch never need this — skip straight to step 3 (render).**
+They work on any page, instrumented or not; `clep scan` only matters for
+finding a `data-clep` target for a feature clip.
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/bin/clep scan <url>
@@ -103,7 +128,9 @@ do on their behalf. Just ask once, plainly:
 Don't list tools you'd consider, commands you ran to check for them, or
 describe "nothing's listening" — just state the ask.
 
-## 2. Instrument, only if missing
+## 2. Instrument, only if missing (feature kind only)
+
+**Tour and launch skip this whole step — go to step 3.**
 
 No npm SDK — plain HTML attributes, found by the platform's Playwright agent.
 
@@ -154,7 +181,29 @@ instead of relying on the auto arc.
 Targets resolve inside `[data-clep=name]`: `input`, `primary`,
 `action:<name>`, `text:<label>`, `file` (upload only), or any CSS selector.
 
+**Login-gated pages**: every scan/render launches a fresh, logged-out
+browser — no cookies or session ever carries over between calls. If
+`clep scan <url>` doesn't find the feature, or the recorded trace shows a
+login screen instead of the target, the app needs auth first. Ask the
+user, plainly:
+
+> This looks like it needs to be logged in first. Can you give me test
+> credentials for it — a throwaway/test account, not your real login —
+> and I'll script the sign-in as the first step?
+
+Once given, prepend login steps to the plan (type email → type password →
+click submit → wait for the redirect), then the normal feature steps
+after. **Never ask for, accept, or reuse a real/production password** —
+whatever's given gets typed into a chat message (so it sits in the
+conversation transcript) and re-sent through the request body on every
+single render, not just once. This doesn't work at all for SSO, MFA, or
+CAPTCHA-gated logins — Playwright has no way through those; if a test
+account still can't get past one, say so and stop, don't keep retrying.
+
 ## 3. Render
+
+**feature** (single instrumented interaction — unchanged, this is the
+original clep command):
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/bin/clep clip \
@@ -165,22 +214,65 @@ ${CLAUDE_PLUGIN_ROOT}/bin/clep clip \
 ```
 
 Omit `--query`/`--steps-file` for the auto arc (type → click → wait-for-change).
-Use `--steps-file plan.json` for the chained flow built in step 2. Add
-`--out <path>` only if the user asked for a local file — otherwise the video
-already lands in the platform UI and that's enough.
+Use `--steps-file plan.json` for the chained flow built in step 2.
+
+**tour** (scroll walkthrough, no instrumentation — this is what "full tour
+showing everything" / "walkthrough of the whole page" means):
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/bin/clep clip \
+  --url <url> --kind tour \
+  --duration 20 --movement calm \
+  --sections "hero, pricing, contact" \
+  --style saas --wait
+```
+
+Omit `--sections` to sweep the whole page evenly instead of naming stops.
+`--duration` is the total clip length — the backend fits per-section holds
+into it, it doesn't need per-section math from you.
+
+**launch** (end-to-end product story — maps every section on the page
+first, then shoots the whole thing in page order, ending near the CTA):
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/bin/clep clip \
+  --url <url> --kind launch \
+  --duration 25 --style saas --wait
+```
+
+**Natural language, any kind** — if the user's own phrasing already has
+everything (URL, what to show, how long, mood), you can pass it straight
+through instead of picking the flags apart yourself; the backend's own
+parser (`director.py`) extracts kind/url/sections/duration/style/movement
+from the text. Any flag you *also* pass alongside `--prompt` still wins
+over what it parsed, so add `--url`/`--kind`/etc. if the prompt is vague on
+any of them:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/bin/clep clip \
+  --prompt "tour of https://acme.ai showing hero, pricing, 20s, calm" \
+  --wait
+```
+
+Add `--out <path>` only if the user asked for a local file — otherwise the
+video already lands in the platform UI and that's enough.
 
 `--wait` polls until `done`/`error` and prints the MP4 URL. Job states:
 `queued → recording → editing → done | error`. On `error`, surface the
-backend message verbatim (usually: feature not found at URL, a `wait` state
-timed out, or the URL is unreachable from the backend) and suggest the fix.
+backend message verbatim (usually: feature/URL not reachable, a `wait`
+state timed out, or — tour/launch — the page has no scrollable sections)
+and suggest the fix.
 
 ## 4. Report back
 
 Tell the user, in one short message:
 - The video is live in their Clep dashboard's Usage page — no action needed.
 - If `--out` was used, the local file path too.
-- Style/fps/quality used, so they know what to ask for differently next time.
+- Style/fps/quality/duration used, so they know what to ask for differently
+  next time.
 
-Re-renders are one command — never re-record by hand. Output is a 2–5s 16:9
-MP4, gradient backdrop + floating window + auto-zoom + custom cursor + click
-ripple by default.
+Re-renders are one command — never re-record by hand. A feature clip is a
+2–5s 16:9 MP4 by default (gradient backdrop + floating window + auto-zoom +
+custom cursor + click ripple); tour/launch runs whatever `--duration` was
+given (2–60s), same window/backdrop styling, calm drift camera instead of
+push-in zoom, plus on-screen section captions unless `--no-captions`.

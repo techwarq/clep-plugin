@@ -13,8 +13,20 @@ configure`):
 Usage:
   clep configure [--url URL] [--key KEY]   interactive if flags omitted
   clep scan <url>
+
+  # feature: single instrumented click (original behavior, unchanged)
   clep clip --url URL --name NAME [--query Q --style S --fps N
             --quality {720p,1080p} --steps-file plan.json --wait [--out f.mp4]]
+
+  # tour: scroll walkthrough, no data-clep needed
+  clep clip --url URL --kind tour --duration 20 --sections "hero,pricing,contact"
+
+  # launch: maps the whole page end-to-end, then shoots
+  clep clip --url URL --kind launch --duration 25
+
+  # natural language: parsed server-side, any other flag here still overrides
+  clep clip --prompt "tour of https://x showing hero, pricing, 20s, calm"
+
   clep jobs
   clep job <id> [--wait [--timeout SEC] [--out file.mp4]]
   clep health
@@ -33,7 +45,7 @@ from pathlib import Path
 
 _CONFIG_PATH = Path.home() / ".clep" / "config.json"
 _HOSTED_URL = "https://clep-platform-919279481036.us-central1.run.app"
-_VERSION = "0.2.6"
+_VERSION = "0.2.8"
 _VERSION_CHECK_URL = (
     "https://raw.githubusercontent.com/techwarq/clep-plugin/main/"
     "plugins/clep/.claude-plugin/plugin.json"
@@ -255,21 +267,42 @@ def _download(out_path: str, dest: str) -> None:
 
 
 def cmd_clip(a) -> None:
-    body: dict = {"url": a.url, "name": a.name}
+    body: dict = {}
+    if a.prompt:
+        body["prompt"] = a.prompt
+    if a.url:
+        body["url"] = a.url
+    if a.name:
+        body["name"] = a.name
+    if a.kind:
+        body["kind"] = a.kind
     if a.query:
         body["query"] = a.query
+    if a.sections:
+        body["sections"] = [s.strip() for s in a.sections.split(",") if s.strip()]
+    if a.duration:
+        body["duration"] = a.duration
+    if a.movement:
+        body["movement"] = a.movement
     if a.style:
         body["style"] = a.style
     if a.fps:
         body["fps"] = a.fps
     if a.quality:
         body["quality"] = a.quality
+    if a.size:
+        body["size"] = a.size
+    if a.bg:
+        body["bg"] = a.bg
+    if a.no_captions:
+        body["captions"] = False
     steps = _load_steps(a.steps_file)
     if steps:
         body["steps"] = steps
     _, payload = _req("POST", "/api/clips", body)
     jid = payload.get("job_id", "") if isinstance(payload, dict) else ""
-    print(f"[clep] job {jid} queued ({a.name} @ {a.url})")
+    label = a.name or a.kind or "clip"
+    print(f"[clep] job {jid} queued ({label} @ {a.url or a.prompt or '?'})")
     if a.wait:
         job = _wait_job(jid, a.timeout, a.out)
         print(json.dumps(job, indent=2))
@@ -312,12 +345,34 @@ def build() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_scan)
 
     c = sub.add_parser("clip", help="Render a clip job.")
-    c.add_argument("--url", required=True)
-    c.add_argument("--name", required=True, help="data-clep name")
+    c.add_argument("--url", default=None, help="App URL to clip. Required unless --prompt embeds "
+                   "one, or --kind mockup (no live page needed).")
+    c.add_argument("--name", default=None, help="data-clep name — feature kind only "
+                   "(omit for tour/launch/mockup, or when a plain --prompt covers it).")
+    c.add_argument("--kind", default=None, choices=["auto", "tour", "feature", "mockup", "launch"],
+                   help="tour: scroll walkthrough, no data-clep needed. launch: maps the whole "
+                        "page end-to-end first, then shoots. feature: single instrumented click "
+                        "(default when --name is given, unchanged original behavior). mockup: "
+                        "synthetic UI render, no browser at all.")
+    c.add_argument("--prompt", default=None, help="Natural-language clip request, e.g. \"tour of "
+                   "https://x showing hero, pricing, 20s, calm\" — parsed server-side into url/"
+                   "kind/sections/duration/style/movement. Any other flag here still overrides "
+                   "what the prompt implied.")
+    c.add_argument("--sections", default=None, help="Comma-separated tour stops, e.g. "
+                   "\"hero, pricing, contact\" [tour/launch].")
+    c.add_argument("--duration", default=None, type=float, help="Output seconds, 2-60. Feature "
+                   "clips are ~2-5s by default; tour/launch need this set to cover more ground.")
+    c.add_argument("--movement", default=None, choices=["calm", "standard", "dynamic"],
+                   help="Camera feel (default: calm for tour/launch, standard for feature).")
     c.add_argument("--query", default=None)
     c.add_argument("--style", default=None, choices=["minimal", "saas", "cinematic", "apple"])
     c.add_argument("--fps", default=None, type=int, choices=[30, 60])
     c.add_argument("--quality", default=None, choices=["720p", "1080p"])
+    c.add_argument("--size", default=None, help="Exact canvas WxH, e.g. 1120x640 (landing-page "
+                   "card) — overrides --quality.")
+    c.add_argument("--bg", default=None, help="Backdrop override: preset (saas/minimal/cinematic/"
+                   "apple/blush), \"#a,#b[,#c]\", or \"solid:#hex\".")
+    c.add_argument("--no-captions", action="store_true", help="Disable on-screen section captions [tour/launch].")
     c.add_argument("--steps-file", default=None)
     c.add_argument("--wait", action="store_true")
     c.add_argument("--timeout", type=float, default=300)
